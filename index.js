@@ -20,9 +20,19 @@ var ZipLite;
         }
         return data;
     }
+    function LEArrayToNumber(data, offset, length) {
+        let num = 0;
+        for (let i = 0; i < length; ++i) {
+            num = (num << 8) | data[offset + i];
+        }
+        return num;
+    }
     function DateToLEArray(date) {
         const data = new Uint8Array(4);
         return data;
+    }
+    function LEArrayToDate(data, offset) {
+        return new Date();
     }
     const CRCTable = [
         0, 1996959894, -301047508, -1727442502, 124634137, 1886057615, -379345611, -1637575261,
@@ -69,7 +79,7 @@ var ZipLite;
     ZipLite.CRC32 = CRC32;
     class Zip {
         constructor() {
-            this.files = [];
+            this.files = {};
         }
         createPKFile(name, data, date) {
             const header = {};
@@ -96,13 +106,7 @@ var ZipLite;
             return ((typeof file === 'string') ?
                 this.createFile(file, data || '', date || new Date()) :
                 this.loadFile(file)).then((pkfile) => {
-                for (let i = 0; i < this.files.length; ++i) {
-                    if (this.files[i].name === pkfile.name) {
-                        this.files[i] = pkfile;
-                        return;
-                    }
-                }
-                this.files.push(pkfile);
+                this.files[pkfile.name] = pkfile;
             });
         }
         convertPK0102(pkfile, file, position) {
@@ -209,7 +213,8 @@ var ZipLite;
             const pk0304 = [];
             let position = 0;
             let headersize = 0;
-            this.files.forEach((pkfile) => {
+            Object.keys(this.files).forEach((key) => {
+                const pkfile = this.files[key];
                 const file = this.convertPK0304(pkfile);
                 const header = this.convertPK0102(pkfile, file, position);
                 position += file.length;
@@ -255,13 +260,95 @@ var ZipLite;
             }
             return zip;
         }
-        load(zipfile) {
+        loadPKFile(zip, offset) {
+            offset += 4;
+            if (zip[offset++] !== 0x14 || zip[offset++] !== 0x00) {
+                throw 'Version error';
+            }
+            offset += 2;
+            if (zip[offset++] !== 0x00 || zip[offset++] !== 0x00) {
+                throw 'Unknown compression algorithm';
+            }
+            const date = LEArrayToDate(zip, offset);
+            offset += 4;
+            offset += 4;
+            const filesize = LEArrayToNumber(zip, offset, 4);
+            offset += 8;
+            const namesize = LEArrayToNumber(zip, offset, 2);
+            offset += 2;
+            const commentsize = LEArrayToNumber(zip, offset, 2);
+            offset += 2;
+            const name = new TextDecoder('utf-8').decode(zip.slice(offset, offset + namesize));
+            offset += namesize;
+            offset += commentsize;
+            const data = zip.slice(offset, offset + filesize);
+            offset += filesize;
+            const header = {};
+            const file = {
+                data: data,
+            };
+            const pkfile = {
+                date: date,
+                name: name,
+                header: header,
+                file: file,
+            };
+            this.files[name] = pkfile;
+            return offset;
         }
+        load(data) {
+            this.files = {};
+            let offset = 0;
+            while (offset < data.length) {
+                if (data[offset] !== 0x50 || data[offset + 1] !== 0x4B) {
+                    throw 'Error token.';
+                }
+                if (data[offset + 2] !== 0x03 || data[offset + 3] !== 0x04) {
+                    if (data[offset + 2] === 0x01 || data[offset + 3] === 0x02) {
+                        break;
+                    }
+                    throw 'Error token.';
+                }
+                offset += this.loadPKFile(data, offset);
+            }
+        }
+        size() { return Object.keys(this.files).length; }
+        get(filename) {
+            if (!this.files[filename]) {
+                return null;
+            }
+            return this.files[filename].file.data;
+        }
+        rename(oldname, newname) {
+            if (!oldname || !newname || !this.files[oldname]) {
+                return false;
+            }
+            this.files[newname] = this.files[oldname];
+            delete this.files[oldname];
+        }
+        remove(filename) {
+            if (!filename) {
+                return false;
+            }
+            if (typeof filename === 'string') {
+                delete this.files[filename];
+                return true;
+            }
+            filename.forEach((file) => { delete this.files[file]; });
+            return true;
+        }
+        removeAll() { this.files = {}; }
     }
     ZipLite.Zip = Zip;
     function zip() { }
     ZipLite.zip = zip;
-    function unzip() { }
+    function unzip(zipfile) {
+        const zip = new Zip();
+        return LoadFile(zipfile).then((data) => {
+            zip.load(new Uint8Array(data.data));
+            return zip;
+        });
+    }
     ZipLite.unzip = unzip;
 })(ZipLite || (ZipLite = {}));
 module.exports = ZipLite;

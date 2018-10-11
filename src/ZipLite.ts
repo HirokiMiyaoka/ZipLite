@@ -55,11 +55,23 @@ module ZipLite
 		return data;
 	}
 
+	function LEArrayToNumber( data: Uint8Array, offset: number, length: number )
+	{
+		let num = 0;
+		for ( let i = 0 ; i < length ; ++i ) { num = ( num << 8 ) | data[ offset + i ]; }
+		return num;
+	}
+
 	function DateToLEArray( date: Date )
 	{
 		const data = new Uint8Array( 4 );
 
 		return data;
+	}
+
+	function LEArrayToDate( data: Uint8Array, offset: number )
+	{
+		return new Date();
 	}
 
 	const CRCTable =
@@ -116,14 +128,32 @@ module ZipLite
 		return NumberToLEArray( crc ^ -1, 4 );
 	}
 
-	export class Zip
+	export interface ZipFile{ filename: string, data: Uint8Array | string }
+
+	export class Zip// implements Iterator<ZipFile>
 	{
-		private files: PKFile[];
+		private files: { [ key: string ]: PKFile };
 
 		constructor()
 		{
-			this.files = [];
+			this.files = {};
 		}
+
+		/*[Symbol.iterator]()//: IterableIterator<ZipFile>
+		{
+			let pointer = 0;
+			const keys = Object.keys( this.files );
+			return { next(): IteratorResult<ZipFile>
+			{
+				const key = keys[ pointer++ ];
+				return {
+					done: pointer < keys.length,
+					value: { filename: key, data: this.files[ key ].file.data },
+				};
+			} };
+		}
+
+		[Symbol.iterator](): IterableIterator<ZipFile> { return this; }*/
 
 		private createPKFile( name: string, data: Uint8Array | string, date: Date )
 		{
@@ -162,15 +192,7 @@ module ZipLite
 				this.createFile( file, data || '', date || new Date() ) :
 				this.loadFile( file ) ).then( ( pkfile ) =>
 			{
-				for ( let i = 0 ; i < this.files.length ; ++i )
-				{
-					if ( this.files[ i ].name === pkfile.name )
-					{
-						this.files[ i ] = pkfile;
-						return;
-					}
-				}
-				this.files.push( pkfile );
+				this.files[ pkfile.name ] = pkfile;
 			} );
 		}
 
@@ -263,8 +285,9 @@ module ZipLite
 			let position = 0;
 			let headersize = 0;
 
-			this.files.forEach( ( pkfile ) =>
+			Object.keys( this.files ).forEach( ( key ) =>
 			{
+				const pkfile = this.files[ key ];
 				const file = this.convertPK0304( pkfile );
 				const header = this.convertPK0102( pkfile, file, position );
 				position += file.length;
@@ -303,12 +326,126 @@ module ZipLite
 			return zip;
 		}
 
-		public load( zipfile: File )
+		private loadPKFile( zip: Uint8Array, offset: number )
 		{
+			// Header.
+			offset += 4;
 
+			// Version.
+			if ( zip[ offset++ ] !== 0x14 || zip[ offset++ ] !== 0x00 ) { throw 'Version error'; }
+
+			// Ignore option.
+			offset += 2;
+
+			// Algorithm.
+			if ( zip[ offset++ ] !== 0x00 || zip[ offset++ ] !== 0x00 ) { throw 'Unknown compression algorithm'; }
+
+			// Date.
+			const date = LEArrayToDate( zip, offset );
+			offset += 4;
+
+			// Ignore CRC.
+			offset += 4;
+
+			// File size;
+			const filesize = LEArrayToNumber( zip, offset, 4 );
+			offset +=8;
+
+			// File name size.
+			const namesize = LEArrayToNumber( zip, offset, 2 );
+			offset += 2;
+
+			// Comment size.
+			const commentsize = LEArrayToNumber( zip, offset, 2 );
+			offset += 2;
+
+			// File name.
+			const name = new TextDecoder( 'utf-8' ).decode( zip.slice( offset, offset + namesize ) );
+			offset += namesize;
+
+			// Ignore comment.
+			offset += commentsize;
+
+			// File.
+			const data = zip.slice( offset, offset + filesize );
+			offset += filesize;
+
+			const header: PK0102 = {};
+			const file: PK0304 =
+			{
+				data: data,
+			};
+			const pkfile: PKFile =
+			{
+				date: date,
+				name: name,
+				header: header,
+				file: file,
+			};
+			this.files[ name ] = pkfile;
+
+			return offset;
 		}
+
+		public load( data: Uint8Array/*, strconv: ( data: Uint8Array ) => string*/ )
+		{
+			this.files = {};
+			let offset = 0;
+
+			// File.
+			while ( offset < data.length )
+			{
+				if ( data[ offset ] !== 0x50 || data[ offset + 1 ] !== 0x4B ) { throw 'Error token.'; }
+				if ( data[ offset + 2 ] !== 0x03 || data[ offset + 3 ] !== 0x04 )
+				{
+					if ( data[ offset + 2 ] === 0x01 || data[ offset + 3 ] === 0x02 ) { break; }
+					throw 'Error token.';
+				}
+				offset += this.loadPKFile( data, offset );
+			}
+
+			// TODO: PK0102 ... string mode => convert data.
+		}
+
+		public size() { return Object.keys( this.files ).length; }
+
+		public get( filename: string ): Uint8Array | string | null
+		{
+			if ( !this.files[ filename ] ) { return null; }
+			return this.files[ filename ].file.data;
+		}
+
+		public rename( oldname: string, newname: string )
+		{
+			if ( !oldname || !newname || !this.files[ oldname ] ) { return false; }
+			this.files[ newname ] = this.files[ oldname ];
+			delete this.files[ oldname ];
+		}
+
+		public remove( filename: string | string[] )
+		{
+			if ( !filename ) { return false; }
+			if ( typeof filename === 'string' )
+			{
+				delete this.files[ filename ];
+				return true;
+			}
+			filename.forEach( ( file ) => { delete this.files[ file ]; } );
+			return true;
+		}
+
+		public removeAll() { this.files = {}; }
 	}
 
 	export function zip(  ){}
-	export function unzip(  ){}
+	export function unzip( zipfile: File )
+	{
+		const zip = new Zip();
+		return LoadFile( zipfile ).then( ( data ) =>
+		{
+			zip.load( new Uint8Array( data.data ) );
+
+			return zip;
+		} );
+	}
 }

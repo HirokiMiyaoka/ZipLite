@@ -1,5 +1,9 @@
 declare module ZipLite {
     function CRC32(data: Uint8Array): Uint8Array;
+    interface ZipFile {
+        filename: string;
+        data: Uint8Array | string;
+    }
     class Zip {
         private files;
         constructor();
@@ -10,8 +14,14 @@ declare module ZipLite {
         private convertPK0102;
         private convertPK0304;
         generate(): Uint8Array;
-        load(zipfile: File): void;
+        private loadPKFile;
+        load(data: Uint8Array): void;
+        size(): number;
+        get(filename: string): Uint8Array | string | null;
+        rename(oldname: string, newname: string): false | undefined;
+        remove(filename: string | string[]): boolean;
+        removeAll(): void;
     }
     function zip(): void;
-    function unzip(): void;
+    function unzip(zipfile: File): Promise<Zip>;
 }
