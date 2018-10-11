@@ -1,0 +1,24 @@
+{
+  "name": "ziplite",
+  "version": "1.0.0",
+  "description": "Zip and unzip of uncompressed ZIP",
+  "main": "index.js",
+  "scripts": {
+    "build:browser": "tsc -p src/browser",
+    "build:nodejs": "tsc -p src/nodejs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HirokiMiyaoka/ZipLite.git"
+  },
+  "author": "Hiroki",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/HirokiMiyaoka/ZipLite/issues"
+  },
+  "homepage": "https://github.com/HirokiMiyaoka/ZipLite#readme",
+  "devDependencies": {
+    "@types/node": "^10.11.7"
+  }
+}
