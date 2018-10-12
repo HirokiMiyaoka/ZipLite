@@ -22,8 +22,8 @@ var ZipLite;
     }
     function LEArrayToNumber(data, offset, length) {
         let num = 0;
-        for (let i = 0; i < length; ++i) {
-            num = (num << 8) | data[offset + i];
+        for (let i = 1; i <= length; ++i) {
+            num = (num << 8) | data[offset + length - i];
         }
         return num;
     }
@@ -73,7 +73,6 @@ var ZipLite;
         for (let b of data) {
             crc = (crc >>> 8) ^ CRCTable[(crc ^ b) & 0xFF];
         }
-        console.log(crc, NumberToLEArray(crc, 4), crc ^ -1, NumberToLEArray(crc ^ -1, 4));
         return NumberToLEArray(crc ^ -1, 4);
     }
     ZipLite.CRC32 = CRC32;
@@ -319,6 +318,7 @@ var ZipLite;
             }
             return this.files[filename].file.data;
         }
+        getFileNames() { return Object.keys(this.files); }
         rename(oldname, newname) {
             if (!oldname || !newname || !this.files[oldname]) {
                 return false;

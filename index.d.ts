@@ -18,6 +18,7 @@ declare module ZipLite {
         load(data: Uint8Array): void;
         size(): number;
         get(filename: string): Uint8Array | string | null;
+        getFileNames(): string[];
         rename(oldname: string, newname: string): false | undefined;
         remove(filename: string | string[]): boolean;
         removeAll(): void;

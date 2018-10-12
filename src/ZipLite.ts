@@ -58,7 +58,7 @@ module ZipLite
 	function LEArrayToNumber( data: Uint8Array, offset: number, length: number )
 	{
 		let num = 0;
-		for ( let i = 0 ; i < length ; ++i ) { num = ( num << 8 ) | data[ offset + i ]; }
+		for ( let i = 1 ; i <= length ; ++i ) { num = ( num << 8 ) | data[ offset + length - i ]; }
 		return num;
 	}
 
@@ -124,7 +124,6 @@ module ZipLite
 		{
 			crc = ( crc >>> 8 ) ^ CRCTable[ ( crc ^ b ) & 0xFF ];
 		}
-		console.log( crc,NumberToLEArray( crc, 4 ),crc ^ -1,NumberToLEArray( crc ^ -1, 4 ) );
 		return NumberToLEArray( crc ^ -1, 4 );
 	}
 
@@ -383,7 +382,6 @@ module ZipLite
 				file: file,
 			};
 			this.files[ name ] = pkfile;
-
 			return offset;
 		}
 
@@ -414,6 +412,8 @@ module ZipLite
 			if ( !this.files[ filename ] ) { return null; }
 			return this.files[ filename ].file.data;
 		}
+
+		public getFileNames() { return Object.keys( this.files ); }
 
 		public rename( oldname: string, newname: string )
 		{
