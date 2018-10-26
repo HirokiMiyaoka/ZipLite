@@ -29,10 +29,26 @@ var ZipLite;
     }
     function DateToLEArray(date) {
         const data = new Uint8Array(4);
+        const Y = (date.getFullYear() - 1980) & 0x7F;
+        const M = (date.getMonth() + 1) & 0xF;
+        const D = (date.getDate()) & 0x1F;
+        const h = (date.getHours()) & 0x1F;
+        const m = (date.getMinutes()) & 0x3F;
+        const s = Math.floor(date.getSeconds() / 2) & 0x1F;
+        data[0] = (h << 3) | (m >>> 3);
+        data[1] = ((m & 0x7) << 5) | s;
+        data[2] = (Y << 1) | (M >>> 3);
+        data[3] = ((M & 0x7) << 5) | D;
         return data;
     }
     function LEArrayToDate(data, offset) {
-        return new Date();
+        const h = data[offset] >> 3;
+        const m = ((data[offset] & 0x7) << 3) | (data[offset + 1] >>> 5);
+        const s = (data[offset + 1] & 0x1F) << 1;
+        const Y = (data[offset + 2] >> 1);
+        const M = ((data[offset + 2] & 0x1) << 3) | (data[offset + 3] >> 5);
+        const D = data[offset + 3] & 0x1F;
+        return new Date(1980 + Y, M - 1, D, h, m, s);
     }
     const CRCTable = [
         0, 1996959894, -301047508, -1727442502, 124634137, 1886057615, -379345611, -1637575261,
